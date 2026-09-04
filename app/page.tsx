@@ -3,12 +3,9 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { CoverWall } from '@/components/CoverWall';
-import { PLATFORMS, PLATFORM_KEYS, type PlatformKey } from '@/lib/platforms';
 import { readRecent, type RecentGame } from '@/lib/recent';
 import { fetchStock, type StockSummary } from '@/lib/stock';
 import type { Resolution } from '@/lib/igdb';
-
-const PRIMARY: PlatformKey[] = ['switch', 'ps5', 'ps4', 'xboxsx', '3ds', 'gba'];
 
 export default function Accueil() {
   const router = useRouter();
@@ -61,7 +58,7 @@ export default function Accueil() {
           />
         </div>
 
-        <Search onOpen={(id, platform) => router.push(`/jeu/${id}?platform=${platform}`)} />
+        <Search onOpen={(id) => router.push(`/jeu/${id}`)} />
         </div>
 
         {recent.length > 0 && (
@@ -70,8 +67,10 @@ export default function Accueil() {
             <div className="-mx-3 flex gap-3 overflow-x-auto px-3 pb-1">
               {recent.map((g) => (
                 <button
-                  key={`${g.id}-${g.platform}`}
-                  onClick={() => router.push(`/jeu/${g.id}?platform=${g.platform}`)}
+                  key={`${g.id}-${g.platformId ?? 'x'}`}
+                  onClick={() =>
+                    router.push(g.platformId ? `/jeu/${g.id}?p=${g.platformId}` : `/jeu/${g.id}`)
+                  }
                   className="w-[84px] shrink-0 text-left active:scale-[0.97]"
                 >
                   {g.cover ? (
@@ -81,6 +80,9 @@ export default function Accueil() {
                     <div className="aspect-[3/4] w-full rounded-lg bg-card" />
                   )}
                   <p className="mt-1.5 line-clamp-2 text-[11px] leading-tight text-muted">{g.name}</p>
+                  {g.platformName && (
+                    <p className="text-[10px] leading-tight text-muted/70">{g.platformName}</p>
+                  )}
                 </button>
               ))}
             </div>
@@ -155,10 +157,8 @@ function ScanCard({
   );
 }
 
-function Search({ onOpen }: { onOpen: (id: number, platform: PlatformKey) => void }) {
+function Search({ onOpen }: { onOpen: (id: number) => void }) {
   const [q, setQ] = useState('');
-  const [platform, setPlatform] = useState<PlatformKey>('switch');
-  const [showAll, setShowAll] = useState(false);
   const [res, setRes] = useState<Resolution | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -170,7 +170,7 @@ function Search({ onOpen }: { onOpen: (id: number, platform: PlatformKey) => voi
     setError(null);
     setRes(null);
     try {
-      const r = await fetch(`/api/games/search?q=${encodeURIComponent(q)}&platform=${platform}`);
+      const r = await fetch(`/api/games/search?q=${encodeURIComponent(q)}`);
       const json = await r.json();
       if (!r.ok) throw new Error(json.error ?? 'Recherche impossible');
       setRes(json as Resolution);
@@ -182,7 +182,7 @@ function Search({ onOpen }: { onOpen: (id: number, platform: PlatformKey) => voi
   }
 
   return (
-    <section className="mt-6">
+    <section className="mt-4">
       <form onSubmit={search}>
         <input
           value={q}
@@ -191,30 +191,10 @@ function Search({ onOpen }: { onOpen: (id: number, platform: PlatformKey) => voi
           aria-label="Chercher un jeu"
           autoComplete="off"
           className="w-full rounded-2xl border border-line bg-card px-4 py-3.5
-                     text-ink placeholder:text-muted/60
-                     outline-none focus:border-ink/30"
+                     text-ink placeholder:text-muted/60 outline-none focus:border-ink/30"
         />
-
-        <div className="mt-3 flex flex-wrap gap-2">
-          {(showAll ? PLATFORM_KEYS : PRIMARY).map((key) => (
-            <button
-              key={key}
-              type="button"
-              onClick={() => setPlatform(key)}
-              className={`chip bg-card ${platform === key ? 'chip-on' : ''}`}
-            >
-              {PLATFORMS[key].label}
-            </button>
-          ))}
-          {!showAll && (
-            <button type="button" onClick={() => setShowAll(true)} className="chip bg-card">
-              Autres…
-            </button>
-          )}
-        </div>
-
         {q.trim().length >= 2 && (
-          <button type="submit" disabled={loading} className="btn-action mt-4 bg-ink text-bg">
+          <button type="submit" disabled={loading} className="btn-action mt-3 bg-ink text-bg">
             {loading ? 'Recherche…' : 'Chercher'}
           </button>
         )}
@@ -223,41 +203,49 @@ function Search({ onOpen }: { onOpen: (id: number, platform: PlatformKey) => voi
       {error && <p className="card mt-4 border-unknown/40 p-4 text-sm text-unknown">{error}</p>}
 
       {res && (
-        <div className="mt-4 space-y-3">
-          {res.confidence === 'non-reconnu' || !res.best ? (
+        <div className="mt-4 space-y-2.5">
+          {!res.best ? (
             <div className="card p-4">
               <p className="font-display font-bold text-unknown">Non reconnu</p>
               <p className="mt-1 text-sm text-muted">
-                Aucun jeu ne correspond sur cette plateforme. Vérifie la plateforme sélectionnée.
+                Aucun jeu ne porte ce titre. Vérifie l’orthographe, ou essaie le titre anglais.
               </p>
             </div>
           ) : (
             <>
-              <div className="flex items-center gap-2">
-                <span className={`chip chip-on ${res.confidence === 'sur' ? 'text-money' : 'text-todo'}`}>
-                  {res.confidence === 'sur' ? 'Sûr' : 'À vérifier'}
-                </span>
-                <span className="text-xs text-muted">écart {res.gap}</span>
-              </div>
-              {res.candidates.slice(0, 4).map((c, i) => (
+              <p className="px-1 text-xs text-muted">
+                Choisis le jeu — tu diras ensuite sur quel support tu l’as.
+              </p>
+              {res.candidates.slice(0, 5).map((c, i) => (
                 <button
                   key={c.id}
-                  onClick={() => onOpen(c.id, platform)}
+                  onClick={() => onOpen(c.id)}
                   className="card flex w-full gap-3 p-3 text-left active:scale-[0.99]"
                 >
                   {c.cover ? (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img src={c.cover} alt="" className={`${i === 0 ? 'h-20 w-[60px]' : 'h-12 w-9'} shrink-0 rounded-lg object-cover`} />
+                    <img
+                      src={c.cover}
+                      alt=""
+                      className={`${i === 0 ? 'h-[76px] w-[57px]' : 'h-14 w-[42px]'} shrink-0 rounded-lg object-cover`}
+                    />
                   ) : (
-                    <div className={`${i === 0 ? 'h-20 w-[60px]' : 'h-12 w-9'} shrink-0 rounded-lg bg-line`} />
+                    <div className={`${i === 0 ? 'h-[76px] w-[57px]' : 'h-14 w-[42px]'} shrink-0 rounded-lg bg-line`} />
                   )}
                   <div className="min-w-0 flex-1">
                     <p className={`truncate font-display font-bold ${i === 0 ? 'text-base' : 'text-sm'}`}>
-                      {c.name}
+                      {c.frenchTitle ?? c.name}
                     </p>
-                    {c.frenchTitle && <p className="truncate text-sm text-muted">{c.frenchTitle}</p>}
-                    <p className="mt-0.5 text-xs text-muted">
+                    <p className="text-xs text-muted">
                       {c.year} · {c.publisher ?? 'éditeur inconnu'}
+                    </p>
+                    {/* Les supports, en aperçu : c'est ce qui permet de
+                        reconnaître le bon jeu du premier coup d'œil. */}
+                    <p className="mt-1 truncate text-[11px] text-muted/80">
+                      {c.platforms.length
+                        ? c.platforms.map((p) => p.abbreviation ?? p.name).slice(0, 5).join(' · ')
+                        : 'support inconnu'}
+                      {c.platforms.length > 5 && ` +${c.platforms.length - 5}`}
                     </p>
                   </div>
                 </button>

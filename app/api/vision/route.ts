@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
 import { resolveGame } from '@/lib/igdb';
-import { isPlatformKey, PLATFORM_KEYS } from '@/lib/platforms';
 import {
   DEFAULT_VISION_MODEL, VISION_MODELS, MAX_LONG_EDGE,
   estimateCost, type VisionModel,
@@ -38,14 +37,14 @@ const MAX_BYTES = 2 * 1024 * 1024;
 const PROMPT = `Transcris le texte visible sur cette boîte de jeu vidéo.
 
 JSON uniquement :
-{"title":"","platform":null,"readable":true,"note":""}
+{"title":"","platformHint":null,"readable":true,"note":""}
 
 - title : le titre tel qu'il est imprimé. Ne devine pas, ne corrige pas, ne complète pas un mot masqué.
-- platform : une clé parmi ${PLATFORM_KEYS.join(' ')} si un logo est lisible, sinon null.
+- platformHint : le nom de la console si un logo est lisible, sinon null. Simple indication.
 - readable : false si rien d'exploitable. Dans ce cas title vaut "".
 - note : une phrase courte si la lecture est gênée (flou, reflet, masqué), sinon "".
 
-N'ajoute pas la plateforme dans le titre. Ignore éditeur, PEGI, prix, code-barres.`;
+N'ajoute pas la console dans le titre. Ignore éditeur, PEGI, prix, code-barres.`;
 
 // Estimation stable du coût des consignes (elles ne changent pas d'un appel a l'autre).
 const PROMPT_TOKENS = Math.ceil(PROMPT.length / 3.6);
@@ -104,10 +103,12 @@ export async function POST(req: Request) {
       });
     }
 
-    const platform = read.platform && isPlatformKey(read.platform) ? read.platform : null;
-    const resolution = await resolveGame(read.title, platform);
+    // Pas de filtre plateforme : l'utilisateur choisira le support sur la fiche,
+    // parmi ceux ou le jeu est reellement sorti. Le logo lu n'est qu'un indice
+    // affiche, jamais un filtre — un logo mal lu ecarterait le bon jeu.
+    const resolution = await resolveGame(read.title);
 
-    return NextResponse.json({ read, resolution, platform, model: m.label, cost, hint: null });
+    return NextResponse.json({ read, resolution, model: m.label, cost, hint: null });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Erreur de lecture';
     return NextResponse.json({ error: message }, { status: 502 });
@@ -152,7 +153,7 @@ function parseImage(body: Body): { data: string; mediaType: string } | { error: 
 
 interface Read {
   title: string;
-  platform: string | null;
+  platformHint: string | null;
   readable: boolean;
   note: string;
 }
@@ -213,7 +214,7 @@ async function transcribe(
   return {
     read: {
       title: String(read.title ?? ''),
-      platform: read.platform ? String(read.platform) : null,
+      platformHint: read.platformHint ? String(read.platformHint) : null,
       readable: Boolean(read.readable),
       note: String(read.note ?? ''),
     },

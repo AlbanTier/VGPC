@@ -17,7 +17,9 @@ export interface RecentGame {
   id: number;
   name: string;
   cover: string | null;
-  platform: string;
+  /** Id de plateforme IGDB. Null quand le support n'a pas encore ete choisi. */
+  platformId: number | null;
+  platformName: string | null;
   at: number;
 }
 
@@ -44,7 +46,7 @@ export function pushRecent(game: Omit<RecentGame, 'at'>): void {
   try {
     const next = [
       { ...game, at: Date.now() },
-      ...readRecent().filter((g) => !(g.id === game.id && g.platform === game.platform)),
+      ...readRecent().filter((g) => !(g.id === game.id && g.platformId === game.platformId)),
     ].slice(0, MAX);
     window.localStorage.setItem(KEY, JSON.stringify(next));
   } catch {

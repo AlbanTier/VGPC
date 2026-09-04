@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useParams, useSearchParams, useRouter } from 'next/navigation';
-import { isPlatformKey, PLATFORMS } from '@/lib/platforms';
+import type { IgdbPlatform } from '@/lib/platforms';
 import {
   PARTS, DEFECTS, WEAR_LABEL, PRESETS,
   conditionFactor, partImpact,
@@ -26,10 +26,11 @@ export default function DetailExemplaire() {
   const params = useSearchParams();
   const router = useRouter();
 
-  const platform = params.get('platform');
+  const platformId = Number(params.get('p')) || null;
   const presetParam = (params.get('preset') as PresetKey | null) ?? 'complet-tres-bon';
 
   const [game, setGame] = useState<GameMatch | null>(null);
+  const [platform, setPlatform] = useState<IgdbPlatform | null>(null);
   const [base, setBase] = useState<number | null>(null);
   const [priceOk, setPriceOk] = useState(true);
   const [notice, setNotice] = useState<string | null>(null);
@@ -42,8 +43,8 @@ export default function DetailExemplaire() {
   });
 
   useEffect(() => {
-    if (!platform || !isPlatformKey(platform)) {
-      setError('Plateforme manquante ou inconnue.');
+    if (!platformId) {
+      setError('Support manquant. Reviens à la fiche et choisis-en un.');
       setLoading(false);
       return;
     }
@@ -53,16 +54,17 @@ export default function DetailExemplaire() {
     fetch('/api/price', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ gameId: Number(id), platform, preset: 'complet-tres-bon' }),
+      body: JSON.stringify({ gameId: Number(id), platformId, preset: 'complet-tres-bon' }),
     })
       .then(async (r) => {
         const json = await r.json();
         if (!r.ok) throw new Error(json.error ?? 'Erreur');
-        return json as { game: GameMatch; price: PriceResult; notice: string | null };
+        return json as { game: GameMatch; platform: IgdbPlatform; price: PriceResult; notice: string | null };
       })
       .then((json) => {
         if (cancelled) return;
         setGame(json.game);
+        setPlatform(json.platform);
         setNotice(json.notice);
         setPriceOk(json.price.ok);
         setBase(json.price.ok ? json.price.base : null);
@@ -71,7 +73,7 @@ export default function DetailExemplaire() {
       .finally(() => !cancelled && setLoading(false));
 
     return () => { cancelled = true; };
-  }, [id, platform]);
+  }, [id, platformId]);
 
   const factor = useMemo(() => conditionFactor(condition), [condition]);
   const price = base === null ? null : Math.round(base * factor * 2) / 2;
@@ -98,7 +100,7 @@ export default function DetailExemplaire() {
       {game && (
         <p className="mt-1 text-sm text-muted">
           {game.frenchTitle ?? game.name}
-          {platform && isPlatformKey(platform) && ` · ${PLATFORMS[platform].label}`}
+          {platform && ` · ${platform.name}`}
         </p>
       )}
 

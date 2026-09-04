@@ -13,12 +13,11 @@
 import { MockProvider } from './providers/mock';
 import { analyse } from './price';
 import { PRESETS, PRESET_KEYS, conditionFactor } from './condition';
-import { PLATFORMS } from './platforms';
 
 const CASES = [
-  { names: ['Mario Kart 8 Deluxe'], platform: 'switch' as const, query: 'Mario Kart 8 Deluxe switch' },
-  { names: ['Pokémon Emerald Version', 'Pokémon Version Émeraude'], platform: 'gba' as const, query: 'Pokémon Version Émeraude gba' },
-  { names: ['FIFA 23'], platform: 'ps4' as const, query: 'FIFA 23 ps4' },
+  { names: ['Mario Kart 8 Deluxe'], keywords: ['switch'], query: 'Mario Kart 8 Deluxe switch' },
+  { names: ['Pokémon Emerald Version', 'Pokémon Version Émeraude'], keywords: ['gba', 'game boy advance'], query: 'Pokémon Version Émeraude gba' },
+  { names: ['FIFA 23'], keywords: ['ps4', 'playstation 4'], query: 'FIFA 23 ps4' },
 ];
 
 async function main() {
@@ -33,7 +32,7 @@ async function main() {
   for (const c of CASES) {
     console.log(`\n${'─'.repeat(72)}\n${c.query}\n${'─'.repeat(72)}`);
     const listings = await provider.search({ text: c.query, limit: 60 });
-    const keywords = PLATFORMS[c.platform].keywords;
+    const keywords = c.keywords;
 
     const base = analyse(listings, { names: c.names, platformKeywords: keywords });
 

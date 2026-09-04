@@ -11,7 +11,7 @@
  *      -> la penalite se calcule sur le nom canonique uniquement.
  */
 
-import { PLATFORMS, type PlatformKey } from './platforms';
+import type { IgdbPlatform } from './platforms';
 import { norm, fixOcrGlyphs, similarity, STOP, round2 } from './text';
 
 const TOKEN_URL = 'https://id.twitch.tv/oauth2/token';
@@ -24,7 +24,7 @@ export interface GameMatch {
   name: string;
   slug: string;
   year: number | null;
-  platforms: string[];
+  platforms: IgdbPlatform[];
   altNames: string[];
   frenchTitle: string | null;
   publisher: string | null;
@@ -113,11 +113,14 @@ const escapeQ = (s: string) => s.replace(/["\\]/g, ' ').trim();
 
 export async function resolveGame(
   title: string,
-  platformKey?: PlatformKey | null,
+  platformId?: number | null,
 ): Promise<Resolution> {
-  const platform = platformKey ? PLATFORMS[platformKey] : null;
+  // Le filtre plateforme devient OPTIONNEL. Le parcours normal est
+  // "je cherche un titre, puis je dis sur quel support je l'ai" — filtrer
+  // trop tot obligeait a connaitre le support avant de chercher, et ecartait
+  // silencieusement le bon jeu quand on se trompait de puce.
   const onPlatform = (g: RawGame) =>
-    !platform || (g.platforms ?? []).some((p) => p.id === platform.id);
+    !platformId || (g.platforms ?? []).some((p) => p.id === platformId);
 
   let rows: RawGame[] = [];
   let via: MatchedVia = 'search';
@@ -171,7 +174,11 @@ function toMatch(g: RawGame, via: MatchedVia, queryUsed: string) {
     name: g.name,
     slug: g.slug,
     year: g.first_release_date ? new Date(g.first_release_date * 1000).getFullYear() : null,
-    platforms: (g.platforms ?? []).map((p) => p.abbreviation ?? p.name),
+    platforms: (g.platforms ?? []).map((p) => ({
+      id: p.id,
+      name: p.name,
+      abbreviation: p.abbreviation ?? null,
+    })),
     altNames: (g.alternative_names ?? []).map((a) => a.name),
     frenchTitle:
       (g.game_localizations ?? []).find((l) => /france/i.test(l.region?.name ?? ''))?.name ?? null,
