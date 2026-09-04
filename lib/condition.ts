@@ -153,3 +153,22 @@ export function partImpact(base: number, c: ItemCondition, part: Part): number {
   };
   return Math.round((conditionFactor(with_) - conditionFactor(without)) * base);
 }
+
+/** Résumé lisible d'un état, pour une ligne de stock ou un titre d'annonce. */
+export function describeCondition(c: ItemCondition): string {
+  const has = (k: PartKey) => c.present.includes(k);
+
+  let base: string;
+  if (!has('media')) base = 'Sans le jeu';
+  else if (has('blister')) base = 'Neuf scellé';
+  else if (has('boitier') && has('jaquette') && has('notice')) base = 'Complet';
+  else if (has('boitier') && has('jaquette')) base = 'Sans notice';
+  else if (has('boitier')) base = 'Boîte sans jaquette';
+  else base = 'Jeu seul';
+
+  const parts = [`${base}, ${WEAR_LABEL[c.wear].toLowerCase()}`];
+  if (c.defects.length) {
+    parts.push(`${c.defects.length} défaut${c.defects.length > 1 ? 's' : ''}`);
+  }
+  return parts.join(' · ');
+}

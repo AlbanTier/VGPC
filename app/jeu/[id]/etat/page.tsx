@@ -36,6 +36,10 @@ export default function DetailExemplaire() {
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [source, setSource] = useState<string>('mock');
+  const [range, setRange] = useState<{ min: number; max: number } | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const [condition, setCondition] = useState<ItemCondition>({
     ...PRESETS[presetParam in PRESETS ? presetParam : 'complet-tres-bon'].condition,
@@ -59,7 +63,7 @@ export default function DetailExemplaire() {
       .then(async (r) => {
         const json = await r.json();
         if (!r.ok) throw new Error(json.error ?? 'Erreur');
-        return json as { game: GameMatch; platform: IgdbPlatform; price: PriceResult; notice: string | null };
+        return json as { game: GameMatch; platform: IgdbPlatform; price: PriceResult; notice: string | null; source: string };
       })
       .then((json) => {
         if (cancelled) return;
@@ -68,6 +72,8 @@ export default function DetailExemplaire() {
         setNotice(json.notice);
         setPriceOk(json.price.ok);
         setBase(json.price.ok ? json.price.base : null);
+        setSource(json.source);
+        setRange(json.price.ok ? json.price.range : null);
       })
       .catch((e) => !cancelled && setError(e instanceof Error ? e.message : 'Erreur'))
       .finally(() => !cancelled && setLoading(false));
@@ -77,6 +83,36 @@ export default function DetailExemplaire() {
 
   const factor = useMemo(() => conditionFactor(condition), [condition]);
   const price = base === null ? null : Math.round(base * factor * 2) / 2;
+
+  async function save() {
+    if (!platform) return;
+    setSaving(true);
+    setSaveError(null);
+    try {
+      const res = await fetch('/api/items', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          gameId: Number(id),
+          platformId: platform.id,
+          platformName: platform.name,
+          condition,
+          // On fige le prix TEL QU'AFFICHE, pas une valeur recalculee plus tard :
+          // c'est ce chiffre-la que l'utilisateur a vu et validé.
+          advisedPrice: price,
+          range,
+          source,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? 'Enregistrement impossible');
+      router.push('/stock');
+    } catch (e) {
+      setSaveError(e instanceof Error ? e.message : 'Erreur');
+    } finally {
+      setSaving(false);
+    }
+  }
 
   const togglePart = (key: PartKey) =>
     setCondition((c) => ({
@@ -198,12 +234,17 @@ export default function DetailExemplaire() {
               Pas assez de comparables pour chiffrer cet exemplaire.
             </p>
           )}
-          <button className="btn-action mt-3 bg-ink text-bg" disabled>
-            Enregistrer dans mon stock
+          {saveError && (
+            <p className="mt-2 text-center text-xs text-unknown">{saveError}</p>
+          )}
+          <button
+            onClick={save}
+            disabled={saving || !platform}
+            className="btn-action mt-3 bg-ink text-bg"
+          >
+            {saving ? 'Enregistrement…' : 'Enregistrer dans mon stock'}
           </button>
-          <p className="pb-1 pt-1.5 text-center text-[11px] text-muted">
-            bientôt — le stock arrive avec Supabase
-          </p>
+          <div className="h-1" />
         </div>
       )}
     </main>

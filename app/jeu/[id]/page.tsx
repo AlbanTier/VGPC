@@ -13,6 +13,7 @@ interface PricePayload {
   platform: IgdbPlatform;
   price: PriceResult;
   notice: string | null;
+  source: string;
 }
 
 /**
@@ -33,6 +34,8 @@ export default function FicheJeu() {
   const router = useRouter();
 
   const platformId = Number(params.get('p')) || null;
+  // Retour depuis le stock : on n'a que le nom du support, on retrouve son id.
+  const platformName = params.get('pn');
 
   const [game, setGame] = useState<GameMatch | null>(null);
   const [gameError, setGameError] = useState<string | null>(null);
@@ -45,10 +48,17 @@ export default function FicheJeu() {
         if (!r.ok) throw new Error(json.error ?? 'Erreur');
         return json as GameMatch;
       })
-      .then((g) => !cancelled && setGame(g))
+      .then((g) => {
+        if (cancelled) return;
+        setGame(g);
+        if (!platformId && platformName) {
+          const match = g.platforms.find((p) => p.name === platformName);
+          if (match) router.replace(`/jeu/${id}?p=${match.id}`);
+        }
+      })
       .catch((e) => !cancelled && setGameError(e instanceof Error ? e.message : 'Erreur'));
     return () => { cancelled = true; };
-  }, [id]);
+  }, [id, platformId, platformName, router]);
 
   return (
     <main className="safe-top px-4 pb-28">
@@ -142,6 +152,9 @@ function Priced({
   const [data, setData] = useState<PricePayload | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -175,6 +188,36 @@ function Priced({
   }, [gameId, platformId, preset]);
 
   const platform = data?.platform ?? game.platforms.find((p) => p.id === platformId);
+
+  async function quickSave() {
+    if (!data?.platform) return;
+    setSaving(true);
+    setSaveError(null);
+    try {
+      const res = await fetch('/api/items', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          gameId,
+          platformId,
+          platformName: data.platform.name,
+          // fromPreset reste a true : c'est ce qui alimente le compteur
+          // "a completer" du stock. Un ajout rapide s'assume comme approximatif.
+          condition: PRESETS[preset].condition,
+          advisedPrice: data.price.ok ? data.price.advisedPrice : null,
+          range: data.price.ok ? data.price.range : null,
+          source: data.source,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? 'Enregistrement impossible');
+      setSaved(true);
+    } catch (e) {
+      setSaveError(e instanceof Error ? e.message : 'Erreur');
+    } finally {
+      setSaving(false);
+    }
+  }
 
   return (
     <>
@@ -214,12 +257,32 @@ function Priced({
       ) : data?.price.ok ? (
         <>
           <PriceCard price={data.price} />
+
+          {saveError && <p className="mt-3 text-center text-xs text-unknown">{saveError}</p>}
+
           <button
-            onClick={() => router.push(`/jeu/${gameId}/etat?p=${platformId}&preset=${preset}`)}
-            className="btn-action mt-3 border border-line text-ink"
+            onClick={quickSave}
+            disabled={saving || saved}
+            className={`btn-action mt-3 ${saved ? 'bg-money text-bg' : 'bg-ink text-bg'}`}
           >
-            Détailler l’état — boîte en main
+            {saved ? 'Ajouté au stock ✓' : saving ? 'Enregistrement…' : 'Ajouter au stock'}
           </button>
+
+          {saved ? (
+            <button
+              onClick={() => router.push('/stock')}
+              className="btn-action mt-2 border border-line text-ink"
+            >
+              Voir mon stock
+            </button>
+          ) : (
+            <button
+              onClick={() => router.push(`/jeu/${gameId}/etat?p=${platformId}&preset=${preset}`)}
+              className="btn-action mt-2 border border-line text-ink"
+            >
+              Détailler l’état — boîte en main
+            </button>
+          )}
         </>
       ) : data ? (
         <div className="card p-4">
