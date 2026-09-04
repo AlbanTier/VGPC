@@ -6,6 +6,7 @@ import { PLATFORMS, isPlatformKey } from '@/lib/platforms';
 import { PRESETS, PRESET_KEYS, type PresetKey } from '@/lib/condition';
 import type { GameMatch } from '@/lib/igdb';
 import type { PriceResult } from '@/lib/price';
+import { pushRecent } from '@/lib/recent';
 
 interface Payload {
   game: GameMatch;
@@ -45,7 +46,17 @@ export default function FicheJeu() {
         if (!r.ok) throw new Error(json.error ?? 'Erreur');
         return json as Payload;
       })
-      .then((json) => !cancelled && setData(json))
+      .then((json) => {
+        if (cancelled) return;
+        setData(json);
+        // Alimente le mur de l'accueil et la reprise "derniers scans".
+        pushRecent({
+          id: json.game.id,
+          name: json.game.frenchTitle ?? json.game.name,
+          cover: json.game.cover,
+          platform: platform as string,
+        });
+      })
       .catch((e) => !cancelled && setError(e instanceof Error ? e.message : 'Erreur'))
       .finally(() => !cancelled && setLoading(false));
 
@@ -55,7 +66,7 @@ export default function FicheJeu() {
   }, [id, platform, preset]);
 
   return (
-    <main className="safe-top safe-bottom px-4 pb-10">
+    <main className="safe-top px-4 pb-28">
       <button onClick={() => router.back()} className="mb-4 mt-2 text-sm text-muted">
         ← Retour
       </button>

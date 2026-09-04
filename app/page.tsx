@@ -1,16 +1,161 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { CoverWall } from '@/components/CoverWall';
 import { PLATFORMS, PLATFORM_KEYS, type PlatformKey } from '@/lib/platforms';
+import { readRecent, type RecentGame } from '@/lib/recent';
+import { fetchStock, type StockSummary } from '@/lib/stock';
 import type { Resolution } from '@/lib/igdb';
 
-// Les plateformes qu'on propose d'emblee. Le reste est derriere "Autres" :
-// afficher 15 puces sur un ecran de 390px, personne ne clique.
 const PRIMARY: PlatformKey[] = ['switch', 'ps5', 'ps4', 'xboxsx', '3ds', 'gba'];
 
 export default function Accueil() {
   const router = useRouter();
+  const [stock, setStock] = useState<StockSummary | null>(null);
+  const [recent, setRecent] = useState<RecentGame[]>([]);
+
+  useEffect(() => {
+    setRecent(readRecent());
+    fetchStock().then(setStock);
+  }, []);
+
+  // Le mur montre le stock d'abord, puis les jeux consultés pour qu'il ne
+  // reste pas désespérément vide avant le premier enregistrement.
+  const covers = [
+    ...(stock?.covers ?? []),
+    ...recent.map((r) => r.cover).filter((c): c is string => Boolean(c)),
+  ].filter((c, i, a) => a.indexOf(c) === i);
+
+  return (
+    <div className="relative min-h-dvh">
+      <CoverWall covers={covers} />
+
+      <main className="safe-top relative z-10 px-3 pb-40">
+        <header className="pb-7 pt-12 text-center">
+          <h1
+            className="font-display text-[2.75rem] font-bold leading-none tracking-tight"
+            style={{ textShadow: '0 2px 24px rgba(10,11,15,0.9)' }}
+          >
+            VGPC
+          </h1>
+          <p className="mt-2 text-sm text-ink/70" style={{ textShadow: '0 1px 12px rgba(10,11,15,0.9)' }}>
+            Scanne un jeu, sors le bon prix, publie l’annonce.
+          </p>
+        </header>
+
+        <div className="rounded-3xl border border-line/70 bg-bg/70 p-3.5 backdrop-blur-xl">
+        <StockStrip stock={stock} recentCount={recent.length} />
+
+        <div className="mt-3.5 grid grid-cols-2 gap-3">
+          <ScanCard
+            title="Scanner un lot"
+            subtitle="une étagère entière"
+            onClick={() => router.push('/scan?mode=lot')}
+          />
+          <ScanCard
+            title="Scanner un jeu"
+            subtitle="boîte en main"
+            onClick={() => router.push('/scan')}
+            primary
+          />
+        </div>
+
+        <Search onOpen={(id, platform) => router.push(`/jeu/${id}?platform=${platform}`)} />
+        </div>
+
+        {recent.length > 0 && (
+          <section className="mt-7">
+            <h2 className="mb-3 px-1 text-xs uppercase tracking-wide text-muted">Derniers scans</h2>
+            <div className="-mx-3 flex gap-3 overflow-x-auto px-3 pb-1">
+              {recent.map((g) => (
+                <button
+                  key={`${g.id}-${g.platform}`}
+                  onClick={() => router.push(`/jeu/${g.id}?platform=${g.platform}`)}
+                  className="w-[84px] shrink-0 text-left active:scale-[0.97]"
+                >
+                  {g.cover ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={g.cover} alt="" className="aspect-[3/4] w-full rounded-lg object-cover" />
+                  ) : (
+                    <div className="aspect-[3/4] w-full rounded-lg bg-card" />
+                  )}
+                  <p className="mt-1.5 line-clamp-2 text-[11px] leading-tight text-muted">{g.name}</p>
+                </button>
+              ))}
+            </div>
+          </section>
+        )}
+      </main>
+    </div>
+  );
+}
+
+/** Bandeau de stats. Dit la vérité quand il n'y a rien, plutôt que d'afficher des zéros muets. */
+function StockStrip({ stock, recentCount }: { stock: StockSummary | null; recentCount: number }) {
+  if (!stock) return <div className="card h-[68px] animate-pulse" />;
+
+  if (stock.unavailable) {
+    return (
+      <p className="card border-todo/40 p-3 text-center text-xs text-todo">
+        Base de données injoignable — le stock ne s’affiche pas, le reste fonctionne.
+      </p>
+    );
+  }
+
+  if (stock.count === 0) {
+    return (
+      <p className="card p-3.5 text-center text-xs leading-relaxed text-muted">
+        {recentCount > 0
+          ? 'Ton mur se remplit avec les jeux que tu consultes. Enregistre-en un pour qu’il compte vraiment.'
+          : 'Ton mur est vide. Chaque jeu scanné vient s’y ajouter.'}
+      </p>
+    );
+  }
+
+  return (
+    <div className="card grid grid-cols-3 divide-x divide-line p-3.5">
+      <Stat value={String(stock.count)} label={stock.count > 1 ? 'jeux' : 'jeu'} />
+      <Stat value={`${stock.estimatedValue} €`} label="valeur estimée" tone="text-money" />
+      <Stat
+        value={String(stock.toComplete)}
+        label="à compléter"
+        tone={stock.toComplete > 0 ? 'text-todo' : undefined}
+      />
+    </div>
+  );
+}
+
+function Stat({ value, label, tone }: { value: string; label: string; tone?: string }) {
+  return (
+    <div className="px-2 text-center">
+      <p className={`num text-lg leading-tight ${tone ?? ''}`}>{value}</p>
+      <p className="mt-0.5 text-[11px] text-muted">{label}</p>
+    </div>
+  );
+}
+
+function ScanCard({
+  title, subtitle, onClick, primary,
+}: {
+  title: string; subtitle: string; onClick: () => void; primary?: boolean;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`flex h-28 flex-col items-start justify-end rounded-2xl border p-4 text-left
+                  transition-transform active:scale-[0.98]
+                  ${primary
+                    ? 'border-transparent bg-ink text-bg'
+                    : 'border-line bg-card'}`}
+    >
+      <span className="whitespace-nowrap font-display text-[15px] font-bold leading-tight">{title}</span>
+      <span className={`text-xs ${primary ? 'text-bg/60' : 'text-muted'}`}>{subtitle}</span>
+    </button>
+  );
+}
+
+function Search({ onOpen }: { onOpen: (id: number, platform: PlatformKey) => void }) {
   const [q, setQ] = useState('');
   const [platform, setPlatform] = useState<PlatformKey>('switch');
   const [showAll, setShowAll] = useState(false);
@@ -36,159 +181,91 @@ export default function Accueil() {
     }
   }
 
-  const open = (gameId: number) => router.push(`/jeu/${gameId}?platform=${platform}`);
-
-  const platforms = showAll ? PLATFORM_KEYS : PRIMARY;
-
   return (
-    <main className="safe-top safe-bottom px-4 pb-10">
-      <header className="mb-6 pt-2">
-        <h1 className="font-display text-2xl font-bold tracking-tight">VGPC</h1>
-        <p className="mt-1 text-sm text-muted">
-          Trouve le jeu, sors le bon prix, publie l’annonce.
-        </p>
-      </header>
-
-      {/* Les deux entrees de scan des maquettes. Desactivees tant que la vision
-          n'est pas branchee — mais visibles, pour que la place soit tenue. */}
-      <div className="mb-6 grid grid-cols-2 gap-3">
-        <button
-          disabled
-          className="card flex h-28 flex-col items-start justify-end p-4 text-left opacity-40"
-        >
-          <span className="font-display text-base font-bold">Scanner un lot</span>
-          <span className="text-xs text-muted">bientôt</span>
-        </button>
-        <button
-          disabled
-          className="card flex h-28 flex-col items-start justify-end p-4 text-left opacity-40"
-        >
-          <span className="font-display text-base font-bold">Scanner un jeu</span>
-          <span className="text-xs text-muted">bientôt</span>
-        </button>
-      </div>
-
-      <form onSubmit={search} className="mb-4">
-        <label htmlFor="q" className="mb-2 block text-sm font-semibold">
-          Chercher un jeu
-        </label>
+    <section className="mt-6">
+      <form onSubmit={search}>
         <input
-          id="q"
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          placeholder="Pokémon Version Émeraude"
+          placeholder="Chercher un jeu par son titre"
+          aria-label="Chercher un jeu"
           autoComplete="off"
           className="w-full rounded-2xl border border-line bg-card px-4 py-3.5
-                     text-ink placeholder:text-muted/60 outline-none
-                     focus:border-ink/30"
+                     text-ink placeholder:text-muted/60
+                     outline-none focus:border-ink/30"
         />
 
         <div className="mt-3 flex flex-wrap gap-2">
-          {platforms.map((key) => (
+          {(showAll ? PLATFORM_KEYS : PRIMARY).map((key) => (
             <button
               key={key}
               type="button"
               onClick={() => setPlatform(key)}
-              className={`chip ${platform === key ? 'chip-on' : ''}`}
+              className={`chip bg-card ${platform === key ? 'chip-on' : ''}`}
             >
               {PLATFORMS[key].label}
             </button>
           ))}
           {!showAll && (
-            <button type="button" onClick={() => setShowAll(true)} className="chip">
+            <button type="button" onClick={() => setShowAll(true)} className="chip bg-card">
               Autres…
             </button>
           )}
         </div>
 
-        <button
-          type="submit"
-          disabled={loading || q.trim().length < 2}
-          className="btn-action mt-4 bg-ink text-bg"
-        >
-          {loading ? 'Recherche…' : 'Chercher'}
-        </button>
+        {q.trim().length >= 2 && (
+          <button type="submit" disabled={loading} className="btn-action mt-4 bg-ink text-bg">
+            {loading ? 'Recherche…' : 'Chercher'}
+          </button>
+        )}
       </form>
 
-      {error && (
-        <p className="card border-unknown/40 p-4 text-sm text-unknown">{error}</p>
-      )}
+      {error && <p className="card mt-4 border-unknown/40 p-4 text-sm text-unknown">{error}</p>}
 
-      {res && <Results res={res} onOpen={open} />}
-    </main>
-  );
-}
-
-function Results({ res, onOpen }: { res: Resolution; onOpen: (id: number) => void }) {
-  if (res.confidence === 'non-reconnu' || !res.best) {
-    return (
-      <div className="card p-4">
-        <p className="font-display text-base font-bold text-unknown">Non reconnu</p>
-        <p className="mt-1 text-sm text-muted">
-          Aucun jeu ne correspond sur cette plateforme. Vérifie la plateforme, ou tape
-          le titre autrement.
-        </p>
-      </div>
-    );
-  }
-
-  const others = res.candidates.slice(1, 4);
-
-  return (
-    <section className="space-y-3">
-      {/* Le badge de confiance vient directement des seuils mesures dans le spike. */}
-      <div className="flex items-center gap-2">
-        <span
-          className={`chip chip-on ${res.confidence === 'sur' ? 'text-money' : 'text-todo'}`}
-        >
-          {res.confidence === 'sur' ? 'Sûr' : 'À vérifier'}
-        </span>
-        <span className="text-xs text-muted">écart {res.gap}</span>
-      </div>
-
-      <button
-        onClick={() => onOpen(res.best!.id)}
-        className="card flex w-full gap-3 p-3 text-left active:scale-[0.99]"
-      >
-        <Cover url={res.best.cover} />
-        <div className="min-w-0 flex-1">
-          <p className="truncate font-display text-base font-bold">{res.best.name}</p>
-          {res.best.frenchTitle && (
-            <p className="truncate text-sm text-muted">{res.best.frenchTitle}</p>
+      {res && (
+        <div className="mt-4 space-y-3">
+          {res.confidence === 'non-reconnu' || !res.best ? (
+            <div className="card p-4">
+              <p className="font-display font-bold text-unknown">Non reconnu</p>
+              <p className="mt-1 text-sm text-muted">
+                Aucun jeu ne correspond sur cette plateforme. Vérifie la plateforme sélectionnée.
+              </p>
+            </div>
+          ) : (
+            <>
+              <div className="flex items-center gap-2">
+                <span className={`chip chip-on ${res.confidence === 'sur' ? 'text-money' : 'text-todo'}`}>
+                  {res.confidence === 'sur' ? 'Sûr' : 'À vérifier'}
+                </span>
+                <span className="text-xs text-muted">écart {res.gap}</span>
+              </div>
+              {res.candidates.slice(0, 4).map((c, i) => (
+                <button
+                  key={c.id}
+                  onClick={() => onOpen(c.id, platform)}
+                  className="card flex w-full gap-3 p-3 text-left active:scale-[0.99]"
+                >
+                  {c.cover ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={c.cover} alt="" className={`${i === 0 ? 'h-20 w-[60px]' : 'h-12 w-9'} shrink-0 rounded-lg object-cover`} />
+                  ) : (
+                    <div className={`${i === 0 ? 'h-20 w-[60px]' : 'h-12 w-9'} shrink-0 rounded-lg bg-line`} />
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <p className={`truncate font-display font-bold ${i === 0 ? 'text-base' : 'text-sm'}`}>
+                      {c.name}
+                    </p>
+                    {c.frenchTitle && <p className="truncate text-sm text-muted">{c.frenchTitle}</p>}
+                    <p className="mt-0.5 text-xs text-muted">
+                      {c.year} · {c.publisher ?? 'éditeur inconnu'}
+                    </p>
+                  </div>
+                </button>
+              ))}
+            </>
           )}
-          <p className="mt-1 text-xs text-muted">
-            {res.best.year} · {res.best.publisher ?? 'éditeur inconnu'}
-          </p>
-        </div>
-      </button>
-
-      {others.length > 0 && (
-        <div>
-          <p className="mb-2 text-xs uppercase tracking-wide text-muted">Ce n’est pas ça ?</p>
-          <div className="space-y-2">
-            {others.map((c) => (
-              <button
-                key={c.id}
-                onClick={() => onOpen(c.id)}
-                className="card flex w-full items-center gap-3 p-2.5 text-left active:scale-[0.99]"
-              >
-                <Cover url={c.cover} small />
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm">{c.name}</p>
-                  <p className="text-xs text-muted">{c.year}</p>
-                </div>
-              </button>
-            ))}
-          </div>
         </div>
       )}
     </section>
   );
-}
-
-function Cover({ url, small }: { url: string | null; small?: boolean }) {
-  const size = small ? 'h-12 w-9' : 'h-20 w-[60px]';
-  if (!url) return <div className={`${size} shrink-0 rounded-lg bg-line`} />;
-  // eslint-disable-next-line @next/next/no-img-element
-  return <img src={url} alt="" className={`${size} shrink-0 rounded-lg object-cover`} />;
 }

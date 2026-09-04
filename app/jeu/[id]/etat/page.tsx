@@ -89,7 +89,7 @@ export default function DetailExemplaire() {
     }));
 
   return (
-    <main className="safe-top px-4 pb-40">
+    <main className="safe-top px-4 pb-56">
       <button onClick={() => router.back()} className="mb-4 mt-2 text-sm text-muted">
         ← Retour
       </button>
@@ -177,8 +177,10 @@ export default function DetailExemplaire() {
       {/* Barre de prix collée en bas : le chiffre doit rester visible pendant
           qu'on coche, sinon on ne voit pas l'effet de ce qu'on fait. */}
       {!loading && !error && (
-        <div className="safe-bottom fixed inset-x-0 bottom-0 mx-auto w-full max-w-[430px]
-                        border-t border-line bg-card/95 px-4 pt-3 backdrop-blur">
+        // bottom-14 : la hauteur de la barre de navigation. Sans ca le prix
+        // passe dessous et on ne voit plus l'effet des cases qu'on coche.
+        <div className="fixed inset-x-0 bottom-14 mx-auto w-full max-w-[430px]
+                        border-t border-line bg-card/95 px-4 pb-3 pt-3 backdrop-blur">
           {priceOk && price !== null ? (
             <>
               <div className="flex items-baseline justify-between">

@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from 'next';
+import { BottomNav } from '@/components/BottomNav';
 import './globals.css';
 
 // Les polices passent par un <link>, pas par next/font/google, et c'est
@@ -35,6 +36,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body>
         <div className="mx-auto min-h-dvh w-full max-w-[430px]">{children}</div>
+        <BottomNav />
       </body>
     </html>
   );
