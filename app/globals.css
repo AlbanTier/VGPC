@@ -1,0 +1,61 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    background: #0a0b0f;
+    color-scheme: dark;
+  }
+
+  body {
+    @apply bg-bg text-ink font-sans antialiased;
+    /* L'app vit dans un raccourci iPhone : on neutralise le rebond de scroll
+       et le zoom au double-tap, sinon ca ne fait pas "application". */
+    overscroll-behavior-y: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* iOS zoome sur un champ dont la police fait moins de 16px. */
+  input,
+  textarea,
+  select {
+    font-size: 16px;
+  }
+}
+
+@layer components {
+  .card {
+    @apply rounded-2xl border border-line bg-card;
+  }
+
+  /* Les chiffres en Space Grotesk, avec les chiffres tabulaires :
+     sans ca, les prix dansent d'une ligne a l'autre dans le stock. */
+  .num {
+    @apply font-display font-bold;
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: 'tnum' 1;
+  }
+
+  .btn-action {
+    @apply h-action w-full rounded-2xl font-display text-base font-bold
+           transition-transform active:scale-[0.98] disabled:opacity-40;
+  }
+
+  .chip {
+    @apply inline-flex h-chip items-center gap-1.5 rounded-full border border-line
+           px-3.5 text-sm text-muted transition-colors;
+  }
+
+  .chip-on {
+    @apply border-transparent bg-ink/10 text-ink;
+  }
+}
+
+/* Zone sure pour l'encoche et la barre d'accueil iPhone. */
+.safe-top {
+  padding-top: max(1rem, env(safe-area-inset-top));
+}
+.safe-bottom {
+  padding-bottom: max(1rem, env(safe-area-inset-bottom));
+}
